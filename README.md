@@ -17,7 +17,7 @@ These are the Docker Hub autobuild images located [here](https://hub.docker.com/
 Default production mode
 
 ```sh
-docker run -e BOT_API_KEY=<YOU_KEY_HERE> -d locnh/mastercardfxbot
+docker run --name masterfxbot --restart unless-stopped -e BOT_API_KEY=<YOU_KEY_HERE> -d locnh/mastercardfxbot
 ```
 
 ## Contribute

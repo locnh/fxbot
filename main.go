@@ -18,6 +18,7 @@ import (
 
 var (
 	BOT_API_KEY string
+	BOT_DEBUG   string
 	provided    bool
 )
 
@@ -37,8 +38,12 @@ type masterFXData struct {
 func init() {
 	BOT_API_KEY, provided = os.LookupEnv("BOT_API_KEY")
 	if !provided {
-		log.Fatal("BOT_API_KEY is not set")
+		log.Print("BOT_API_KEY is not set")
 		os.Exit(128)
+	}
+	BOT_DEBUG, provided = os.LookupEnv("BOT_DEBUG")
+	if !provided {
+		log.Print("BOT_DEBUG is not set, default is false")
 	}
 }
 
@@ -46,6 +51,10 @@ func main() {
 	bot, err := tgbotapi.NewBotAPI(BOT_API_KEY)
 	if err != nil {
 		log.Panic(err)
+	}
+
+	if BOT_DEBUG != "" {
+		bot.Debug = true
 	}
 
 	log.Printf("Authorized on account %s", bot.Self.UserName)
@@ -69,45 +78,54 @@ func main() {
 
 			switch update.Message.Command() {
 			case "help", "start":
-				msg.Text = "`1000 USD in EUR`"
+				msg.Text = "`0.88EUR/USD or USD/EUR`"
 			case "status":
 				msg.Text = "I'm ok."
 			default:
-				msg.Text = "I don't know that command"
+				msg.Text = ""
 			}
 
-			if _, err := bot.Send(msg); err != nil {
-				log.Panic(err)
+			if msg.Text != "" {
+				if _, err := bot.Send(msg); err != nil {
+					log.Panic(err)
+				}
 			}
 		}
 
 		params, matched := parseMessage(update.Message.Text)
 		if matched {
-			resMsg := getFXRate(params)
+			if resMsg := getFXRate(params); resMsg != "" {
+				log.Printf("%v", params)
 
-			msg := tgbotapi.NewMessage(update.Message.Chat.ID, resMsg)
-			msg.ParseMode = "markdown"
-			msg.ReplyToMessageID = update.Message.MessageID
+				msg := tgbotapi.NewMessage(update.Message.Chat.ID, resMsg)
+				msg.ParseMode = "markdown"
+				msg.ReplyToMessageID = update.Message.MessageID
 
-			if _, err := bot.Send(msg); err != nil {
-				log.Panic(err)
+				if _, err := bot.Send(msg); err != nil {
+					log.Panic(err)
+				}
+			} else {
+				log.Print("Error, no message")
 			}
 		}
 	}
 }
 
 func parseMessage(txtMsg string) (params []string, matched bool) {
-	re := regexp.MustCompile(`(\d+).*(\w{3}).*(\w{3})`)
+	re := regexp.MustCompile(`^([0-9]*[.]?[0-9]+)?[ ]?(\w{3})[ ]?/[ ]?(\w{3})$`)
 	matches := re.FindStringSubmatch(txtMsg)
 	if len(matches) > 3 {
 		params = matches[1:]
+		if params[0] == "" {
+			params[0] = "1"
+		}
 		return params, true
 	}
 	return []string{}, false
 }
 
 func getFXRate(params []string) (recv string) {
-	recv = "Unknown error"
+	recv = ""
 
 	url := "https://www.mastercard.us/settlement/currencyrate/fxDate=0000-00-00;transCurr=" + strings.ToUpper(params[1]) + ";crdhldBillCurr=" + strings.ToUpper(params[2]) + ";bankFee=0;transAmt=" + params[0] + "/conversion-rate"
 
@@ -129,12 +147,14 @@ func getFXRate(params []string) (recv string) {
 
 		p := message.NewPrinter(language.English)
 
-		recv = p.Sprintf("\xF0\x9F\x92\xB8 `%.2f %s`   \xF0\x9F\x94\x84   `%.2f %s`\n\xF0\x9F\x92\xB1 Rate: `%.2f`",
-			ex.Data.TransAmt,
-			strings.ToUpper(params[1]),
-			ex.Data.CrdhldBillAmt,
-			strings.ToUpper(params[2]),
-			ex.Data.ConversionRate)
+		if ex.Data.ConversionRate > 0 {
+			recv = p.Sprintf("\xF0\x9F\x92\xB8 `%.2f %s`   \xF0\x9F\x94\x84   `%.2f %s`\n\xF0\x9F\x92\xB1 Rate: `%.2f`",
+				ex.Data.TransAmt,
+				strings.ToUpper(params[1]),
+				ex.Data.CrdhldBillAmt,
+				strings.ToUpper(params[2]),
+				ex.Data.ConversionRate)
+		}
 
 	} else {
 		recv = fmt.Sprintf("%d - %s", resp.StatusCode, resp.Status)
