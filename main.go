@@ -112,7 +112,7 @@ func main() {
 }
 
 func parseMessage(txtMsg string) (params []string, matched bool) {
-	re := regexp.MustCompile(`^([0-9]*[.]?[0-9]+)?[ ]?(\w{3})[ ]?/[ ]?(\w{3})$`)
+	re := regexp.MustCompile(`^([0-9]*[.]?[0-9]+)?[ ]?(\w{3})[ ]?/?[ ]?(\w{3})$`)
 	matches := re.FindStringSubmatch(txtMsg)
 	if len(matches) > 3 {
 		params = matches[1:]
