@@ -127,7 +127,7 @@ func parseMessage(txtMsg string) (params []string, matched bool) {
 func getFXRate(params []string) (recv string) {
 	recv = ""
 
-	url := "https://www.mastercard.us/settlement/currencyrate/fxDate=0000-00-00;transCurr=" + strings.ToUpper(params[1]) + ";crdhldBillCurr=" + strings.ToUpper(params[2]) + ";bankFee=0;transAmt=" + params[0] + "/conversion-rate"
+	url := "https://www.mastercard.us/settlement/currencyrate/conversion-rate?fxDate=0000-00-00&transCurr=" + strings.ToUpper(params[1]) + "&crdhldBillCurr=" + strings.ToUpper(params[2]) + "&bankFee=0&transAmt=" + params[0]
 
 	resp, err := http.Get(url)
 	if err != nil {
