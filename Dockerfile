@@ -8,10 +8,10 @@ COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
 
-RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o mastercardfxbot .
+RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o fxbot .
 
 FROM alpine
 
-COPY --from=builder /app/mastercardfxbot /mastercardfxbot
+COPY --from=builder /app/fxbot /fxbot
 
-ENTRYPOINT ["/mastercardfxbot"]
+ENTRYPOINT ["/fxbot"]

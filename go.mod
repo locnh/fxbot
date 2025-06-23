@@ -1,8 +1,8 @@
 module FXBot
 
-go 1.17
+go 1.24
 
 require (
-	github.com/go-telegram-bot-api/telegram-bot-api/v5 v5.4.0-beta.0
-	golang.org/x/text v0.3.7
+	github.com/go-telegram-bot-api/telegram-bot-api/v5 v5.5.1
+	golang.org/x/text v0.15.0
 )

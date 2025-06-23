@@ -5,8 +5,7 @@ go:
 
 script:
   - echo "$DOCKER_PASSWORD" | docker login --username "$DOCKER_USERNAME" --password-stdin
-  - CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o mastercardfxbot .
-  - docker build -t locnh/mastercardfxbot .
+  - docker build -t locnh/fxbot .
 
 deploy:
   - provider: script

@@ -3,11 +3,12 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"log"
 	"net/http"
 	"os"
 	"regexp"
+	"strconv"
 	"strings"
 
 	"golang.org/x/text/language"
@@ -20,19 +21,22 @@ var (
 	BOT_API_KEY string
 	BOT_DEBUG   string
 	provided    bool
+	httpClient  *http.Client
 )
 
-type masterFX struct {
-	Name        string       `json:"name"`
-	Description string       `json:"description"`
-	Date        string       `json:"date"`
-	Data        masterFXData `json:"data"`
+type RevolutQuote struct {
+	Sender    AmountCurrency `json:"sender"`
+	Recipient AmountCurrency `json:"recipient"`
+	Rate      RateInfo       `json:"rate"`
 }
 
-type masterFXData struct {
-	ConversionRate float64 `json:"conversionRate"`
-	CrdhldBillAmt  float64 `json:"crdhldBillAmt"`
-	TransAmt       float64 `json:"transAmt"`
+type AmountCurrency struct {
+	Amount   float64 `json:"amount"`
+	Currency string  `json:"currency"`
+}
+
+type RateInfo struct {
+	Rate float64 `json:"rate"`
 }
 
 func init() {
@@ -45,12 +49,13 @@ func init() {
 	if !provided {
 		log.Print("BOT_DEBUG is not set, default is false")
 	}
+	httpClient = &http.Client{}
 }
 
 func main() {
 	bot, err := tgbotapi.NewBotAPI(BOT_API_KEY)
 	if err != nil {
-		log.Panic(err)
+		log.Fatalf("Failed to create bot: %v", err)
 	}
 
 	if BOT_DEBUG != "" {
@@ -87,7 +92,7 @@ func main() {
 
 			if msg.Text != "" {
 				if _, err := bot.Send(msg); err != nil {
-					log.Panic(err)
+					log.Printf("Error sending command reply: %v", err)
 				}
 			}
 		}
@@ -102,7 +107,7 @@ func main() {
 				msg.ReplyToMessageID = update.Message.MessageID
 
 				if _, err := bot.Send(msg); err != nil {
-					log.Panic(err)
+					log.Printf("Error sending message: %v", err)
 				}
 			} else {
 				log.Print("Error, no message")
@@ -127,33 +132,55 @@ func parseMessage(txtMsg string) (params []string, matched bool) {
 func getFXRate(params []string) (recv string) {
 	recv = ""
 
-	url := "https://www.mastercard.us/settlement/currencyrate/conversion-rate?fxDate=0000-00-00&transCurr=" + strings.ToUpper(params[1]) + "&crdhldBillCurr=" + strings.ToUpper(params[2]) + "&bankFee=0&transAmt=" + params[0]
+	url := fmt.Sprintf("https://www.revolut.com/api/exchange/quote?amount=%s&country=DE&fromCurrency=%s&isRecipientAmount=false&toCurrency=%s",
+		params[0],
+		strings.ToUpper(params[1]),
+		strings.ToUpper(params[2]))
 
-	resp, err := http.Get(url)
+	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		log.Print(err)
+		return
+	}
+	req.Header.Add("accept-language", "en")
+
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		log.Print(err)
+		return
 	}
 
 	defer resp.Body.Close()
 	if resp.StatusCode == http.StatusOK {
-		bodyBytes, err := ioutil.ReadAll(resp.Body)
+		bodyBytes, err := io.ReadAll(resp.Body)
 		if err != nil {
-			log.Fatal(err)
+			log.Print(err)
+			return
 		}
-		bodyString := string(bodyBytes)
 
-		var ex masterFX
-		_ = json.Unmarshal([]byte(bodyString), &ex)
+		var quote RevolutQuote
+		if err := json.Unmarshal(bodyBytes, &quote); err != nil {
+			log.Printf("Error unmarshalling Revolut response: %v", err)
+			return
+		}
+
+		senderAmount, err := strconv.ParseFloat(params[0], 64)
+		if err != nil {
+			log.Printf("Error parsing amount '%s': %v", params[0], err)
+			return
+		}
 
 		p := message.NewPrinter(language.English)
 
-		if ex.Data.ConversionRate > 0 {
-			recv = p.Sprintf("\xF0\x9F\x92\xB8 `%.2f %s`   \xF0\x9F\x94\x84   `%.2f %s`\n\xF0\x9F\x92\xB1 Rate: `%.2f`",
-				ex.Data.TransAmt,
-				strings.ToUpper(params[1]),
-				ex.Data.CrdhldBillAmt,
-				strings.ToUpper(params[2]),
-				ex.Data.ConversionRate)
+		if quote.Rate.Rate > 0 {
+			recipientAmount := senderAmount * quote.Rate.Rate
+
+			recv = p.Sprintf("\xF0\x9F\x92\xB8 `%.2f %s`   \xF0\x9F\x94\x84   `%.2f %s`\n\xF0\x9F\x92\xB1 Rate: `%.6f`",
+				senderAmount,
+				quote.Sender.Currency,
+				recipientAmount,
+				quote.Recipient.Currency,
+				quote.Rate.Rate)
 		}
 
 	} else {
