@@ -121,19 +121,32 @@ func parseMessage(txtMsg string) (params []string, matched bool) {
 	matches := re.FindStringSubmatch(txtMsg)
 	if len(matches) > 3 {
 		params = matches[1:]
-		if params[0] == "" {
-			params[0] = "1"
+		if isValidCurrency(params[1]) && isValidCurrency(params[2]) {
+			if params[0] == "" {
+				params[0] = "1"
+			}
+			return params, true
 		}
-		return params, true
 	}
 	return []string{}, false
+}
+
+func isValidCurrency(currency string) bool {
+	_, ok := revolutHoldingCurrencies[strings.ToUpper(currency)]
+	return ok
 }
 
 func getFXRate(params []string) (recv string) {
 	recv = ""
 
-	url := fmt.Sprintf("https://www.revolut.com/api/exchange/quote?amount=%s&country=DE&fromCurrency=%s&isRecipientAmount=false&toCurrency=%s",
-		params[0],
+	senderAmount, err := strconv.ParseFloat(params[0], 64)
+	if err != nil {
+		log.Printf("Error parsing amount '%s': %v", params[0], err)
+		return
+	}
+
+	url := fmt.Sprintf("https://www.revolut.com/api/exchange/quote?amount=%d&country=DE&fromCurrency=%s&isRecipientAmount=false&toCurrency=%s",
+		int(senderAmount*100), // Gửi số tiền đã nhân 100 và chuyển thành số nguyên
 		strings.ToUpper(params[1]),
 		strings.ToUpper(params[2]))
 
